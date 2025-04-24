@@ -1,136 +1,120 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Speech & Sign Language Recognition</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Job Interview Simulation</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      margin: 20px;
-      background-color: #f5f5f5;
-    }
-
-    h1 {
-      text-align: center;
-    }
-
-    .tabs {
       display: flex;
-      justify-content: center;
-      margin-bottom: 20px;
-    }
-
-    .tab-button {
-      padding: 10px 20px;
-      margin: 0 5px;
-      background-color: #ddd;
-      border: none;
-      cursor: pointer;
-      border-radius: 5px 5px 0 0;
-      font-weight: bold;
-    }
-
-    .tab-button.active {
-      background-color: #4CAF50;
+      flex-direction: row;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      height: 100vh;
+      background: linear-gradient(90deg, #1e1e2f 0%, #2c2c3d 100%);
       color: white;
     }
 
-    .tab-content {
-      display: none;
-      background-color: white;
+    .container {
+      flex: 1;
       padding: 20px;
-      border-radius: 0 5px 5px 5px;
-      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
     }
 
-    .tab-content.active {
-      display: block;
+    h2 {
+      color: #66ffe0;
     }
 
     textarea {
-      width: 100%;
-      height: 200px;
-      font-size: 16px;
+      background: #2a2a3b;
+      color: white;
+      border: 1px solid #66ffe0;
       padding: 10px;
-      border: 1px solid #ccc;
-      resize: vertical;
+      font-size: 20px; /* Increased font size for better visibility */
+      width: 100%;
+      height: 400px; /* Increased height for larger display */
+      resize: none;
     }
 
     button {
-      padding: 10px 20px;
-      margin-right: 10px;
-      font-size: 16px;
-      cursor: pointer;
-      background-color: #4CAF50;
-      color: white;
+      padding: 10px;
+      background: #00ffcc;
+      color: black;
+      font-weight: bold;
       border: none;
-      border-radius: 4px;
+      cursor: pointer;
+      border-radius: 8px;
+      font-size: 16px;
     }
 
-    button:hover {
-      background-color: #45a049;
+    #mic-icon {
+      font-size: 40px;
+      color: red;
+      transition: 0.3s ease;
     }
 
-    #video-frame {
+    .active {
+      text-shadow: 0 0 20px red;
+    }
+
+    #sign-video {
       width: 100%;
-      max-width: 640px;
       height: auto;
-      margin-top: 20px;
+      border: 3px solid #00ffff;
+      border-radius: 12px;
+    }
+
+    .row {
+      display: flex;
+      gap: 20px;
+      flex: 1;
     }
   </style>
 </head>
 <body>
 
-  <h1>Speech & Sign Language Recognition</h1>
-
-  <div class="tabs">
-    <button class="tab-button active" onclick="showTab('speech')">Speech-to-Text</button>
-    <button class="tab-button" onclick="showTab('sign')">Sign Language</button>
+  <div class="container">
+    <h2>🎤 Interviewer (Speech to Text)</h2>
+    <div>
+      <button onclick="startSpeechToText()">Start Recording</button>
+      <button onclick="stopSpeechToText()">Stop Recording</button>
+      <span id="mic-icon">🎙️</span>
+    </div>
+    <textarea id="speech-output" placeholder="Speech will be transcribed here..."></textarea>
   </div>
 
-  <!-- Speech-to-Text Tab -->
-  <div id="speech" class="tab-content active">
-    <button onclick="startSpeechToText()">Start Transcription</button>
-    <button onclick="stopSpeechToText()">Stop Transcription</button>
-    <textarea id="transcription-output" readonly placeholder="Transcribed text will appear here..."></textarea>
+  <div class="container">
+    <h2>🧑‍🦯 Candidate (Sign to Text)</h2>
+    <video id="sign-video" autoplay muted></video>
+    <canvas id="hand-canvas"></canvas>
+    <textarea id="sign-output" placeholder="Recognized letters will appear here..."></textarea>
+    <button onclick="deleteLastWord()">Delete Last Word</button>
   </div>
 
-  <!-- Sign Language Recognition Tab -->
-  <div id="sign" class="tab-content">
-    <div id="video-frame">Waiting for video stream...</div>
-  </div>
-
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
   <script>
-    // Tab Switching Logic
-    function showTab(tabId) {
-      document.querySelectorAll(".tab-button").forEach(btn => btn.classList.remove("active"));
-      document.querySelectorAll(".tab-content").forEach(tab => tab.classList.remove("active"));
-
-      document.querySelector(`.tab-button[onclick="showTab('${tabId}')"]`).classList.add("active");
-      document.getElementById(tabId).classList.add("active");
-    }
-
-    // Speech Recognition Script
     let recognition;
-    if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+    const micIcon = document.getElementById('mic-icon');
+
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
       recognition.continuous = true;
       recognition.interimResults = true;
 
-      recognition.onresult = function (event) {
+      recognition.onresult = (event) => {
         let transcript = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
           transcript += event.results[i][0].transcript;
         }
-        document.getElementById('transcription-output').value = transcript;
+        document.getElementById('speech-output').value = transcript;
       };
 
-      recognition.onerror = function (event) {
-        console.error("Speech recognition error:", event.error);
-      };
-    } else {
-      alert("Your browser does not support Speech Recognition.");
+      recognition.onstart = () => micIcon.classList.add('active');
+      recognition.onend = () => micIcon.classList.remove('active');
     }
 
     function startSpeechToText() {
@@ -141,19 +125,70 @@
       if (recognition) recognition.stop();
     }
 
-    // Sign Language WebSocket Setup
-    const videoFrame = document.getElementById("video-frame");
-    const socket = new WebSocket("ws://127.0.0.1:8000/video_feed");
+    const videoElement = document.getElementById('sign-video');
+    const canvasElement = document.getElementById('hand-canvas');
+    const ctx = canvasElement.getContext('2d');
+    const signOutput = document.getElementById('sign-output');
+    let lastDetectionTime = Date.now();
+    let currentWord = '';
 
-    socket.onmessage = function(event) {
-      const img = new Image();
-      img.src = "data:image/jpg;base64," + event.data;
-      img.onload = function() {
-        videoFrame.innerHTML = "";
-        videoFrame.appendChild(img);
-      };
-    };
+    function deleteLastWord() {
+      let text = signOutput.value.trim();
+      let words = text.split(' ');
+      words.pop();
+      signOutput.value = words.join(' ') + ' ';
+    }
+
+    function onResults(results) {
+      canvasElement.width = videoElement.videoWidth;
+      canvasElement.height = videoElement.videoHeight;
+
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        const landmarks = results.multiHandLandmarks[0];
+
+        // Draw hand landmarks
+        ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        ctx.beginPath();
+        for (let i = 0; i < landmarks.length; i++) {
+          const x = landmarks[i].x * canvasElement.width;
+          const y = landmarks[i].y * canvasElement.height;
+          ctx.arc(x, y, 5, 0, 2 * Math.PI);
+          ctx.fillStyle = "#66ffe0";
+          ctx.fill();
+        }
+
+        // Dummy prediction (use real model here)
+        const dummyLetter = ['A', 'B', 'C'][Math.floor(Math.random() * 3)];
+        if (Date.now() - lastDetectionTime > 1000) {
+          currentWord += dummyLetter;
+          signOutput.value = currentWord;
+          lastDetectionTime = Date.now();
+        }
+      } else {
+        if (currentWord.length > 0) {
+          signOutput.value += ' ';
+          currentWord = '';
+        }
+      }
+    }
+
+    const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.7
+    });
+    hands.onResults(onResults);
+
+    const camera = new Camera(videoElement, {
+      onFrame: async () => {
+        await hands.send({ image: videoElement });
+      },
+      width: 640,
+      height: 480
+    });
+    camera.start();
   </script>
-
 </body>
 </html>
